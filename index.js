@@ -29,14 +29,17 @@ const members = {
     "はる": "1012884813650329710"
 };
 
-const memberNames = Object.keys(members);
+// 🔥 そうすけ除外
+const memberNames = Object.keys(members).filter(name => name !== "そうすけ");
 
-const cannotImage = ["りつき","せいちー"];
+// 🔥 画像NG
+const cannotImage = ["りつき","せいちー","ゆうや"];
 
-const heavySubjects = ["確率統計","応用物理","情報通信","ディジタル信号処理"];
+// 🔥 情報通信は除外
+const heavySubjects = ["確率統計","応用物理","ディジタル信号処理"];
 const normalSubjects = ["画像情報処理","電子回路","制御工学"];
 
-// 曜日ごとの教科
+// 時間割
 const timetable = {
     1: ["確率統計"],
     2: ["情報通信","ディジタル信号処理","画像情報処理"],
@@ -47,7 +50,7 @@ const timetable = {
 
 const startDate = new Date("2026-04-15T00:00:00+09:00");
 
-// 日数取得
+// 日数
 function getDiffDays(){
     const today = new Date();
     return Math.floor((today - startDate) / (1000*60*60*24));
@@ -60,19 +63,18 @@ function initPoints(){
     return p;
 }
 
-// 指定日までシミュレーション
+// シミュレーション
 function simulateUntil(days){
     let points = initPoints();
 
     for(let d=0; d<=days; d++){
         let used = [];
 
-        // ソート（ポイント少ない順）
         let sorted = Object.entries(points)
             .sort((a,b)=>a[1]-b[1])
             .map(e=>e[0]);
 
-        // 重い教科
+        // 重い
         heavySubjects.forEach(sub => {
             let candidates = sorted.filter(n => !used.includes(n));
             let p1 = candidates[0];
@@ -84,7 +86,7 @@ function simulateUntil(days){
             used.push(p1,p2);
         });
 
-        // 軽い教科
+        // 軽い
         normalSubjects.forEach(sub => {
             let candidates = sorted.filter(n => !used.includes(n));
 
@@ -102,7 +104,7 @@ function simulateUntil(days){
     return points;
 }
 
-// 今日の担当決定
+// 今日担当
 function assignToday(){
     const days = getDiffDays();
 
@@ -154,6 +156,11 @@ function simulateDay(points, returnAssign=false){
         used.push(p);
     });
 
+    // 🔥 情報通信は固定（ポイントなし）
+    if(returnAssign){
+        result["情報通信"] = ["そうすけ"];
+    }
+
     if(returnAssign) return result;
 }
 
@@ -164,14 +171,17 @@ function getTodaySubjects(){
     return timetable[day];
 }
 
+// メンション
 function mention(name){
     return `<@${members[name]}>`;
 }
 
-client.once("ready", () => {
+// 起動
+client.once("clientReady", () => {
     console.log("Bot起動！");
 });
 
+// コマンド
 client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -203,33 +213,26 @@ client.on("interactionCreate", async interaction => {
     // ポイント
     if (interaction.commandName === "point") {
 
-    const days = getDiffDays();
-    const points = simulateUntil(days);
+        const days = getDiffDays();
+        const points = simulateUntil(days);
 
-    // ユーザーID取得
-    const userId = interaction.user.id;
+        const userId = interaction.user.id;
+        let myName = Object.keys(members).find(name => members[name] === userId);
 
-    // 名前を特定
-    let myName = Object.keys(members).find(name => members[name] === userId);
+        if (!myName) {
+            return interaction.reply({
+                content: "登録されていません",
+                ephemeral: true
+            });
+        }
 
-    if (!myName) {
-        return interaction.reply({
-            content: "あなたはメンバーに登録されていません！",
+        let msg = `あなたのポイント：${points[myName]}`;
+
+        interaction.reply({
+            content: msg,
             ephemeral: true
         });
     }
-
-    let myPoint = points[myName];
-
-    let msg = `📊 ${myName} のポイント\n\n`;
-    msg += `${myPoint} ポイント`;
-
-    // 👇 ここが重要（自分だけ見える）
-    interaction.reply({
-        content: msg,
-        ephemeral: true
-    });
-}
 });
 
 client.login(TOKEN);
