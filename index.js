@@ -191,6 +191,7 @@ function mention(name){
 // 起動
 client.once("ready", () => {
     console.log("Bot起動！");
+    console.log("VERSION: 2026-04-15-v1");
 });
 
 // コマンド
