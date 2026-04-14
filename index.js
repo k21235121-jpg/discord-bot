@@ -33,8 +33,8 @@ const memberNames = Object.keys(members);
 
 const cannotImage = ["りつき","せいちー"];
 
-const heavySubjects = ["確率統計","応用物理","情報通信"];
-const normalSubjects = ["ディジタル信号処理","画像情報処理","電子回路","制御工学"];
+const heavySubjects = ["確率統計","応用物理","情報通信","ディジタル信号処理"];
+const normalSubjects = ["画像情報処理","電子回路","制御工学"];
 
 // 曜日ごとの教科
 const timetable = {
