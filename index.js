@@ -1,5 +1,17 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+    res.send("Bot is running");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log("Webサーバー起動");
+});
+
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
@@ -177,7 +189,7 @@ function mention(name){
 }
 
 // 起動
-client.once("clientReady", () => {
+client.once("ready", () => {
     console.log("Bot起動！");
 });
 
