@@ -1,6 +1,9 @@
 const { Client, GatewayIntentBits } = require("discord.js");
-
 const express = require("express");
+
+// =====================
+// Express（Render起動維持用）
+// =====================
 const app = express();
 
 app.get("/", (req, res) => {
@@ -12,13 +15,25 @@ app.listen(PORT, () => {
     console.log("Webサーバー起動");
 });
 
+// =====================
+// TOKENチェック
+// =====================
+const TOKEN = process.env.TOKEN;
+if (!TOKEN) {
+    console.error("TOKEN が設定されていません");
+    process.exit(1);
+}
+
+// =====================
+// Discord Client
+// =====================
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-const TOKEN = process.env.TOKEN;
-
-// 名前とID
+// =====================
+// メンバー
+// =====================
 const members = {
     "りょう": "899578475176951881",
     "しょうご": "549564110631731200",
@@ -41,196 +56,206 @@ const members = {
     "はる": "1012884813650329710"
 };
 
-// 🔥 そうすけ除外
-const memberNames = Object.keys(members).filter(name => name !== "そうすけ");
+const memberNames = Object.keys(members).filter(n => n !== "そうすけ");
 
-// 🔥 画像NG
-const cannotImage = ["りつき","せいちー","ゆうや"];
+// =====================
+// 制約
+// =====================
+const cannotImage = ["りつき", "せいちー", "ゆうや"];
 
-// 🔥 情報通信は除外
-const heavySubjects = ["確率統計","応用物理","ディジタル信号処理"];
-const normalSubjects = ["画像情報処理","電子回路","制御工学"];
+const heavySubjects = ["確率統計", "応用物理", "ディジタル信号処理"];
+const normalSubjects = ["画像情報処理", "電子回路", "制御工学"];
 
-// 時間割
+// =====================
+// 時間割（JS曜日基準）
+// =====================
 const timetable = {
     1: ["確率統計"],
-    2: ["情報通信","ディジタル信号処理","画像情報処理"],
+    2: ["情報通信", "ディジタル信号処理", "画像情報処理"],
     3: ["応用物理"],
     4: ["電子回路"],
     5: ["制御工学"]
 };
 
-const startDate = new Date("2026-04-15T00:00:00+09:00");
-
-// 日数
-function getDiffDays(){
-    const today = new Date();
-    return Math.floor((today - startDate) / (1000*60*60*24));
+// =====================
+// JST日付
+// =====================
+function getJSTDate() {
+    const now = new Date();
+    return new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
 }
 
+// =====================
+// 日数差分
+// =====================
+const startDate = new Date("2026-04-15T00:00:00+09:00");
+
+function getDiffDays() {
+    const now = getJSTDate();
+    now.setHours(0, 0, 0, 0);
+
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+
+    return Math.floor((now - start) / (1000 * 60 * 60 * 24));
+}
+
+// =====================
 // ポイント初期化
-function initPoints(){
+// =====================
+function initPoints() {
     let p = {};
-    memberNames.forEach(name => p[name] = 0);
+    memberNames.forEach(n => (p[n] = 0));
     return p;
 }
 
-// シミュレーション
-function simulateUntil(days){
+// =====================
+// 1日シミュレーション
+// =====================
+function simulateDay(points, returnAssign = false) {
+    let used = [];
+    let result = {};
+
+    // 🔥 各教科の選出前に毎回最新ポイントでソート
+    const getSorted = () =>
+        Object.entries(points)
+            .sort((a, b) => a[1] - b[1])
+            .map(e => e[0]);
+
+    // 重い科目（2人担当）
+    for (let sub of heavySubjects) {
+        let candidates = getSorted().filter(n => !used.includes(n));
+
+        if (candidates.length < 2) continue;
+
+        let p1 = candidates[0];
+        let p2 = candidates[1];
+
+        points[p1] += 2;
+        points[p2] += 2;
+
+        used.push(p1, p2);
+
+        if (returnAssign) result[sub] = [p1, p2];
+    }
+
+    // 軽い科目（1人担当）
+    for (let sub of normalSubjects) {
+        let candidates = getSorted().filter(n => !used.includes(n));
+
+        if (sub === "画像情報処理") {
+            candidates = candidates.filter(n => !cannotImage.includes(n));
+        }
+
+        if (candidates.length === 0) continue;
+
+        let p = candidates[0];
+
+        points[p] += 1;
+        used.push(p);
+
+        if (returnAssign) result[sub] = p;
+    }
+
+    // 固定担当
+    if (returnAssign) {
+        result["情報通信"] = ["そうすけ"];
+    }
+
+    return returnAssign ? result : null;
+}
+
+// =====================
+// シミュレーション（指定日数分）
+// =====================
+function simulateUntil(days) {
     let points = initPoints();
 
-    for(let d=0; d<=days; d++){
-        let used = [];
-
-        let sorted = Object.entries(points)
-            .sort((a,b)=>a[1]-b[1])
-            .map(e=>e[0]);
-
-        // 重い
-        heavySubjects.forEach(sub => {
-            let candidates = sorted.filter(n => !used.includes(n));
-            let p1 = candidates[0];
-            let p2 = candidates[1];
-
-            points[p1] += 2;
-            points[p2] += 2;
-
-            used.push(p1,p2);
-        });
-
-        // 軽い
-        normalSubjects.forEach(sub => {
-            let candidates = sorted.filter(n => !used.includes(n));
-
-            if(sub === "画像情報処理"){
-                candidates = candidates.filter(n => !cannotImage.includes(n));
-            }
-
-            let p = candidates[0];
-
-            points[p] += 1;
-            used.push(p);
-        });
+    for (let i = 0; i < days; i++) {
+        simulateDay(points);
     }
 
     return points;
 }
 
+// =====================
 // 今日担当
-function assignToday(){
+// =====================
+function assignToday() {
     const days = getDiffDays();
-
     let points = initPoints();
 
-    for(let d=0; d<days; d++){
+    for (let i = 0; i < days; i++) {
         simulateDay(points);
     }
 
     return simulateDay(points, true);
 }
 
-// 1日分
-function simulateDay(points, returnAssign=false){
-    let used = [];
-    let result = {};
-
-    let sorted = Object.entries(points)
-        .sort((a,b)=>a[1]-b[1])
-        .map(e=>e[0]);
-
-    // 重い
-    heavySubjects.forEach(sub => {
-        let candidates = sorted.filter(n => !used.includes(n));
-        let p1 = candidates[0];
-        let p2 = candidates[1];
-
-        if(returnAssign) result[sub] = [p1,p2];
-
-        points[p1]+=2;
-        points[p2]+=2;
-
-        used.push(p1,p2);
-    });
-
-    // 軽い
-    normalSubjects.forEach(sub => {
-        let candidates = sorted.filter(n => !used.includes(n));
-
-        if(sub==="画像情報処理"){
-            candidates = candidates.filter(n=>!cannotImage.includes(n));
-        }
-
-        let p = candidates[0];
-
-        if(returnAssign) result[sub]=p;
-
-        points[p]+=1;
-        used.push(p);
-    });
-
-    // 🔥 情報通信は固定（ポイントなし）
-    if(returnAssign){
-        result["情報通信"] = ["そうすけ"];
-    }
-
-    if(returnAssign) return result;
-}
-
+// =====================
 // 今日の教科
-function getTodaySubjects(){
-    const day = new Date().getDay();
-    if(day===0||day===6) return [];
-    return timetable[day];
+// =====================
+function getTodaySubjects() {
+    const day = getJSTDate().getDay();
+    if (day === 0 || day === 6) return [];
+    return timetable[day] || [];
 }
 
+// =====================
 // メンション
-function mention(name){
+// =====================
+function mention(name) {
     return `<@${members[name]}>`;
 }
 
+// =====================
 // 起動
+// =====================
 client.once("ready", () => {
     console.log("Bot起動！");
-    console.log("VERSION: 2026-04-15-v1");
+    console.log("VERSION: stable-2026-04-15");
 });
 
+// =====================
 // コマンド
+// =====================
 client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // 今日
+    // /today
     if (interaction.commandName === "today") {
-
         const subjects = getTodaySubjects();
-        const data = assignToday();
 
-        if(subjects.length===0){
+        if (subjects.length === 0) {
             return interaction.reply("今日は授業なし！");
         }
 
+        const data = assignToday();
+
         let msg = "📚 今日のノート担当\n\n";
 
-        for(let sub of subjects){
-            if(data[sub]){
-                if(Array.isArray(data[sub])){
-                    msg += `${sub}：${data[sub].map(mention).join("・")}\n`;
-                }else{
-                    msg += `${sub}：${mention(data[sub])}\n`;
-                }
+        for (let sub of subjects) {
+            if (!data[sub]) continue;
+
+            if (Array.isArray(data[sub])) {
+                msg += `${sub}：${data[sub].map(mention).join("・")}\n`;
+            } else {
+                msg += `${sub}：${mention(data[sub])}\n`;
             }
         }
 
-        interaction.reply(msg);
+        return interaction.reply(msg);
     }
 
-    // ポイント
+    // /point
     if (interaction.commandName === "point") {
-
         const days = getDiffDays();
-        const points = simulateUntil(days);
+
+        // 🔥 今日分も含める（days + 1）
+        const points = simulateUntil(days + 1);
 
         const userId = interaction.user.id;
-        let myName = Object.keys(members).find(name => members[name] === userId);
+        const myName = Object.keys(members).find(n => members[n] === userId);
 
         if (!myName) {
             return interaction.reply({
@@ -239,10 +264,15 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        let msg = `あなたのポイント：${points[myName]}`;
+        if (myName === "そうすけ") {
+            return interaction.reply({
+                content: "あなたはポイント対象外です（固定担当）",
+                ephemeral: true
+            });
+        }
 
-        interaction.reply({
-            content: msg,
+        return interaction.reply({
+            content: `あなたのポイント：${points[myName]}`,
             ephemeral: true
         });
     }
