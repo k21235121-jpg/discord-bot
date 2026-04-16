@@ -2,52 +2,31 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 const express = require("express");
 
-// =====================
-// Express（Render起動維持用）
-// =====================
+// ===== Express =====
 const app = express();
+app.get("/", (req, res) => res.send("Bot is running"));
+app.listen(process.env.PORT || 3000, () => console.log("Webサーバー起動"));
 
-app.get("/", (req, res) => {
-    res.send("Bot is running");
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log("Webサーバー起動");
-});
-
-// =====================
-// 環境変数チェック
-// =====================
+// ===== 環境変数 =====
 const TOKEN = process.env.TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 if (!TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
-    console.error("環境変数が不足しています（TOKEN / SUPABASE_URL / SUPABASE_KEY）");
+    console.error("環境変数不足");
     process.exit(1);
 }
 
-// =====================
-// Supabase
-// =====================
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// =====================
-// Discord Client
-// =====================
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-// =====================
-// 管理者ID
-// =====================
+// ===== 管理者 =====
 const ADMIN_ID = "1012884813650329710";
 
-// =====================
-// メンバー
-// =====================
+// ===== メンバー =====
 const members = {
     "りょう": "899578475176951881",
     "しょうご": "549564110631731200",
@@ -70,304 +49,254 @@ const members = {
     "はる": "1012884813650329710"
 };
 
+// そうすけは除外
 const memberNames = Object.keys(members).filter(n => n !== "そうすけ");
 
-// =====================
-// 制約
-// =====================
-const cannotImage = ["りつき", "せいちー", "ゆうや"];
-const heavySubjects = ["確率統計", "応用物理", "ディジタル信号処理"];
-const normalSubjects = ["画像情報処理", "電子回路", "制御工学"];
+// ===== 制約 =====
+const cannotImage = ["りつき","せいちー","ゆうや"];
 
-// =====================
-// 時間割
-// =====================
+const heavySubjects = ["確率統計","応用物理","ディジタル信号処理"];
+const normalSubjects = ["画像情報処理","電子回路","制御工学","ソフトウェア工学"];
+
+// ===== 時間割 =====
 const timetable = {
     1: ["確率統計"],
-    2: ["情報通信", "ディジタル信号処理", "画像情報処理"],
-    3: ["応用物理"],
+    2: ["情報通信","ディジタル信号処理","画像情報処理"],
+    3: ["応用物理","ソフトウェア工学"],
     4: ["電子回路"],
     5: ["制御工学"]
 };
 
-// =====================
-// JST日付
-// =====================
-function getJSTDate() {
-    const now = new Date();
-    return new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+// ===== 日付 =====
+function getJSTDate(){
+    return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Tokyo"}));
 }
 
-// =====================
-// 今日の教科
-// =====================
-function getTodaySubjects() {
-    const day = getJSTDate().getDay();
-    if (day === 0 || day === 6) return [];
-    return timetable[day] || [];
+function getTodayStr(){
+    return getJSTDate().toISOString().slice(0,10);
 }
 
-// =====================
-// メンション
-// =====================
-function mention(name) {
-    return `<@${members[name]}>`;
+function getTodaySubjects(){
+    const d = getJSTDate().getDay();
+    if(d===0||d===6) return [];
+    return timetable[d] || [];
 }
 
-// =====================
-// DB: ポイント取得（全員）
-// =====================
-async function getPointsFromDB() {
-    const { data, error } = await supabase
-        .from("points")
-        .select("name, point");
-
-    if (error) throw new Error(`ポイント取得失敗: ${error.message}`);
-
-    const result = {};
-    memberNames.forEach(n => (result[n] = 0));
-    data.forEach(row => {
-        if (result[row.name] !== undefined) {
-            result[row.name] = row.point;
-        }
-    });
-
-    return result;
+// ===== DB =====
+async function getPoints(){
+    const { data } = await supabase.from("points").select("*");
+    let p = {};
+    memberNames.forEach(n=>p[n]=0);
+    data.forEach(r=>p[r.name]=r.point);
+    return p;
 }
 
-// =====================
-// DB: ポイント更新（1人）
-// =====================
-async function setPointInDB(name, point) {
-    const { error } = await supabase
-        .from("points")
-        .upsert({ name, point }, { onConflict: "name" });
-
-    if (error) throw new Error(`ポイント更新失敗: ${error.message}`);
+async function savePoints(points){
+    const updates = Object.entries(points).map(([name,point])=>({name,point}));
+    await supabase.from("points").upsert(updates,{onConflict:"name"});
 }
 
-// =====================
-// DB: ポイント更新（複数）
-// =====================
-async function setPointsBatchInDB(updates) {
-    const { error } = await supabase
-        .from("points")
-        .upsert(updates, { onConflict: "name" });
+// ===== 履歴 =====
+async function saveHistory(date, result){
+    const rows = [];
 
-    if (error) throw new Error(`ポイント一括更新失敗: ${error.message}`);
-}
-
-// =====================
-// DB: 全員リセット
-// =====================
-async function resetAllPointsInDB() {
-    const resets = memberNames.map(n => ({ name: n, point: 0 }));
-    const { error } = await supabase
-        .from("points")
-        .upsert(resets, { onConflict: "name" });
-
-    if (error) throw new Error(`リセット失敗: ${error.message}`);
-}
-
-// =====================
-// 今日の担当を決定（DBのポイントを使用）
-// =====================
-async function assignToday() {
-    const points = await getPointsFromDB();
-    const result = {};
-    const used = [];
-
-    const getSorted = () =>
-        Object.entries(points)
-            .sort((a, b) => a[1] - b[1])
-            .map(e => e[0]);
-
-    // 重い科目
-    for (let sub of heavySubjects) {
-        let candidates = getSorted().filter(n => !used.includes(n));
-        if (candidates.length < 2) continue;
-
-        let p1 = candidates[0];
-        let p2 = candidates[1];
-
-        result[sub] = [p1, p2];
-        points[p1] += 2;
-        points[p2] += 2;
-        used.push(p1, p2);
+    for(let sub in result){
+        const people = Array.isArray(result[sub]) ? result[sub] : [result[sub]];
+        people.forEach(p=>{
+            rows.push({date, subject: sub, name: p});
+        });
     }
 
-    // 軽い科目
-    for (let sub of normalSubjects) {
-        let candidates = getSorted().filter(n => !used.includes(n));
-        if (sub === "画像情報処理") {
-            candidates = candidates.filter(n => !cannotImage.includes(n));
-        }
-        if (candidates.length === 0) continue;
+    await supabase.from("history").insert(rows);
+}
 
-        let p = candidates[0];
-        result[sub] = p;
-        points[p] += 1;
+// ===== ソート =====
+function sortMembers(points){
+    return Object.entries(points)
+        .sort((a,b)=>{
+            if(a[1]===b[1]) return Math.random()-0.5;
+            return a[1]-b[1];
+        })
+        .map(e=>e[0]);
+}
+
+// ===== 担当決定 =====
+async function assignToday(){
+    const points = await getPoints();
+    const used = [];
+    const result = {};
+
+    // 重い
+    for(let sub of heavySubjects){
+        let c = sortMembers(points).filter(n=>!used.includes(n));
+        let p1=c[0], p2=c[1];
+
+        result[sub]=[p1,p2];
+        points[p1]+=2;
+        points[p2]+=2;
+
+        used.push(p1,p2);
+    }
+
+    // 軽い
+    for(let sub of normalSubjects){
+        let c = sortMembers(points).filter(n=>!used.includes(n));
+
+        if(sub==="画像情報処理"){
+            c = c.filter(n=>!cannotImage.includes(n));
+        }
+
+        let p=c[0];
+        result[sub]=p;
+        points[p]+=1;
+
         used.push(p);
     }
 
-    // 固定担当
-    result["情報通信"] = ["そうすけ"];
+    // 情報通信
+    if(getTodaySubjects().includes("情報通信")){
+        result["情報通信"]=["そうすけ"];
+    }
 
-    return { result, points };
+    return {result,points};
 }
 
-// =====================
-// 担当確定してDBに反映
-// =====================
-async function confirmToday() {
-    const { result, points } = await assignToday();
+// ===== 1日1回 =====
+async function confirmTodayOnce(){
+    const today = getTodayStr();
 
-    const updates = Object.entries(points).map(([name, point]) => ({ name, point }));
-    await setPointsBatchInDB(updates);
+    const { data } = await supabase.from("meta").select("*").single();
+
+    if(data && data.date === today){
+        return (await assignToday()).result;
+    }
+
+    const {result,points} = await assignToday();
+
+    await savePoints(points);
+    await saveHistory(today,result);
+
+    await supabase.from("meta").upsert({id:1,date:today});
 
     return result;
 }
 
-// =====================
-// 起動
-// =====================
-client.once("ready", () => {
-    console.log("Bot起動！");
-    console.log("VERSION: db-2026-04-15");
-});
+// ===== 起動 =====
+client.once("clientReady",()=>console.log("Bot起動！"));
 
-// =====================
-// コマンド
-// =====================
-client.on("interactionCreate", async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+// ===== コマンド =====
+client.on("interactionCreate",async interaction=>{
+    if(!interaction.isChatInputCommand()) return;
 
-    // =====================
-    // /today
-    // =====================
-    if (interaction.commandName === "today") {
+    // ===== today =====
+    if(interaction.commandName==="today"){
         const subjects = getTodaySubjects();
 
-        if (subjects.length === 0) {
+        if(subjects.length===0){
             return interaction.reply("今日は授業なし！");
         }
 
         await interaction.deferReply();
 
-        try {
-            const data = await confirmToday();
+        const data = await confirmTodayOnce();
 
-            let msg = "📚 今日のノート担当\n\n";
+        let msg="📚 今日の担当\n\n";
 
-            for (let sub of subjects) {
-                if (!data[sub]) continue;
+        for(let sub of subjects){
+            if(!data[sub]) continue;
 
-                if (Array.isArray(data[sub])) {
-                    msg += `${sub}：${data[sub].map(mention).join("・")}\n`;
-                } else {
-                    msg += `${sub}：${mention(data[sub])}\n`;
-                }
-            }
+            const names = Array.isArray(data[sub]) ? data[sub] : [data[sub]];
 
-            await interaction.editReply(msg);
-        } catch (err) {
-            console.error(err);
-            await interaction.editReply("エラーが発生しました。");
+            msg += `${sub}：${names.map(n=>`<@${members[n]}>`).join("・")}\n`;
         }
+
+        interaction.editReply(msg);
     }
 
-    // =====================
-    // /point
-    // =====================
-    if (interaction.commandName === "point") {
-        await interaction.deferReply({ ephemeral: true });
+    // ===== point =====
+    if(interaction.commandName==="point"){
+        await interaction.deferReply({ephemeral:true});
 
-        try {
-            const points = await getPointsFromDB();
-            const userId = interaction.user.id;
-            const myName = Object.keys(members).find(n => members[n] === userId);
+        const points = await getPoints();
+        const id = interaction.user.id;
 
-            if (!myName) {
-                return interaction.editReply("登録されていません");
-            }
+        const name = Object.keys(members).find(n=>members[n]===id);
 
-            if (myName === "そうすけ") {
-                return interaction.editReply("あなたはポイント対象外です（固定担当）");
-            }
+        if(!name) return interaction.editReply("未登録");
 
-            await interaction.editReply(`あなたのポイント：${points[myName]}pt`);
-        } catch (err) {
-            console.error(err);
-            await interaction.editReply("エラーが発生しました。");
+        if(name==="そうすけ"){
+            return interaction.editReply("ポイント対象外");
         }
+
+        interaction.editReply(`あなたのポイント：${points[name]}pt`);
     }
 
-    // =====================
-    // /admin
-    // =====================
-    if (interaction.commandName === "admin") {
-        if (interaction.user.id !== ADMIN_ID) {
-            return interaction.reply({
-                content: "このコマンドは管理者のみ使用できます。",
-                ephemeral: true
-            });
+    // ===== admin =====
+    if(interaction.commandName==="admin"){
+
+        if(interaction.user.id!==ADMIN_ID){
+            return interaction.reply({content:"管理者のみ",ephemeral:true});
         }
 
         const sub = interaction.options.getSubcommand();
 
-        // /admin view
-        if (sub === "view") {
-            await interaction.deferReply({ ephemeral: true });
+        // view
+        if(sub==="view"){
+            await interaction.deferReply({ephemeral:true});
 
-            try {
-                const points = await getPointsFromDB();
+            const points = await getPoints();
 
-                const sorted = Object.entries(points)
-                    .sort((a, b) => a[1] - b[1]);
+            let msg="📊 ポイント一覧\n\n";
 
-                let msg = "📊 全員のポイント一覧\n\n";
-                sorted.forEach(([name, point]) => {
-                    msg += `${name}：${point}pt\n`;
+            Object.entries(points)
+                .sort((a,b)=>a[1]-b[1])
+                .forEach(([n,p])=>{
+                    msg += `${n}：${p}pt\n`;
                 });
 
-                await interaction.editReply(msg);
-            } catch (err) {
-                console.error(err);
-                await interaction.editReply("エラーが発生しました。");
-            }
+            interaction.editReply(msg);
         }
 
-        // /admin set
-        if (sub === "set") {
-            await interaction.deferReply({ ephemeral: true });
+        // set
+        if(sub==="set"){
+            const name = interaction.options.getString("name");
+            const point = interaction.options.getInteger("point");
 
-            try {
-                const name = interaction.options.getString("name");
-                const point = interaction.options.getInteger("point");
+            await supabase
+                .from("points")
+                .upsert({name,point},{onConflict:"name"});
 
-                if (!memberNames.includes(name)) {
-                    return interaction.editReply(`「${name}」は登録されていません。`);
-                }
-
-                await setPointInDB(name, point);
-                await interaction.editReply(`${name} のポイントを ${point}pt に変更しました。`);
-            } catch (err) {
-                console.error(err);
-                await interaction.editReply("エラーが発生しました。");
-            }
+            interaction.reply({content:`${name} → ${point}pt`,ephemeral:true});
         }
 
-        // /admin reset
-        if (sub === "reset") {
-            await interaction.deferReply({ ephemeral: true });
+        // reset
+        if(sub==="reset"){
+            const reset = memberNames.map(n=>({name:n,point:0}));
 
-            try {
-                await resetAllPointsInDB();
-                await interaction.editReply("全員のポイントをリセットしました。");
-            } catch (err) {
-                console.error(err);
-                await interaction.editReply("エラーが発生しました。");
-            }
+            await supabase
+                .from("points")
+                .upsert(reset,{onConflict:"name"});
+
+            interaction.reply({content:"全リセット完了",ephemeral:true});
+        }
+
+        // history
+        if(sub==="history"){
+            await interaction.deferReply({ephemeral:true});
+
+            const { data } = await supabase
+                .from("history")
+                .select("*")
+                .order("date",{ascending:false})
+                .limit(20);
+
+            let msg="📜 履歴（最新20件）\n\n";
+
+            data.forEach(r=>{
+                msg += `${r.date} ${r.subject}：${r.name}\n`;
+            });
+
+            interaction.editReply(msg);
         }
     }
 });
