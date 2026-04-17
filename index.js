@@ -49,7 +49,6 @@ const members = {
     "はる": "1012884813650329710"
 };
 
-// そうすけは除外
 const memberNames = Object.keys(members).filter(n => n !== "そうすけ");
 
 // ===== 制約 =====
@@ -96,7 +95,7 @@ async function savePoints(points){
     await supabase.from("points").upsert(updates,{onConflict:"name"});
 }
 
-// ===== 履歴 =====
+// ===== 履歴保存 =====
 async function saveHistory(date, result){
     const rows = [];
 
@@ -108,6 +107,20 @@ async function saveHistory(date, result){
     }
 
     await supabase.from("history").insert(rows);
+}
+
+// ===== 履歴から復元 =====
+function buildResultFromHistory(historyData){
+    const result = {};
+
+    historyData.forEach(r=>{
+        if(!result[r.subject]){
+            result[r.subject] = [];
+        }
+        result[r.subject].push(r.name);
+    });
+
+    return result;
 }
 
 // ===== ソート =====
@@ -126,7 +139,7 @@ async function assignToday(){
     const used = [];
     const result = {};
 
-    // 重い
+    // 重い教科
     for(let sub of heavySubjects){
         let c = sortMembers(points).filter(n=>!used.includes(n));
         let p1=c[0], p2=c[1];
@@ -138,7 +151,7 @@ async function assignToday(){
         used.push(p1,p2);
     }
 
-    // 軽い
+    // 軽い教科
     for(let sub of normalSubjects){
         let c = sortMembers(points).filter(n=>!used.includes(n));
 
@@ -153,7 +166,7 @@ async function assignToday(){
         used.push(p);
     }
 
-    // 情報通信
+    // 情報通信（固定）
     if(getTodaySubjects().includes("情報通信")){
         result["情報通信"]=["そうすけ"];
     }
@@ -161,22 +174,25 @@ async function assignToday(){
     return {result,points};
 }
 
-// ===== 1日1回 =====
+// ===== 1日1回処理 =====
 async function confirmTodayOnce(){
     const today = getTodayStr();
 
-    const { data } = await supabase.from("meta").select("*").single();
+    // すでに存在するか確認
+    const { data } = await supabase
+        .from("history")
+        .select("*")
+        .eq("date", today);
 
-    if(data && data.date === today){
-        return (await assignToday()).result;
+    if(data && data.length > 0){
+        return buildResultFromHistory(data);
     }
 
+    // 初回のみ計算
     const {result,points} = await assignToday();
 
     await savePoints(points);
     await saveHistory(today,result);
-
-    await supabase.from("meta").upsert({id:1,date:today});
 
     return result;
 }
@@ -233,7 +249,6 @@ client.on("interactionCreate",async interaction=>{
 
     // ===== admin =====
     if(interaction.commandName==="admin"){
-
         if(interaction.user.id!==ADMIN_ID){
             return interaction.reply({content:"管理者のみ",ephemeral:true});
         }
@@ -243,7 +258,6 @@ client.on("interactionCreate",async interaction=>{
         // view
         if(sub==="view"){
             await interaction.deferReply({ephemeral:true});
-
             const points = await getPoints();
 
             let msg="📊 ポイント一覧\n\n";
@@ -257,29 +271,6 @@ client.on("interactionCreate",async interaction=>{
             interaction.editReply(msg);
         }
 
-        // set
-        if(sub==="set"){
-            const name = interaction.options.getString("name");
-            const point = interaction.options.getInteger("point");
-
-            await supabase
-                .from("points")
-                .upsert({name,point},{onConflict:"name"});
-
-            interaction.reply({content:`${name} → ${point}pt`,ephemeral:true});
-        }
-
-        // reset
-        if(sub==="reset"){
-            const reset = memberNames.map(n=>({name:n,point:0}));
-
-            await supabase
-                .from("points")
-                .upsert(reset,{onConflict:"name"});
-
-            interaction.reply({content:"全リセット完了",ephemeral:true});
-        }
-
         // history
         if(sub==="history"){
             await interaction.deferReply({ephemeral:true});
@@ -290,8 +281,7 @@ client.on("interactionCreate",async interaction=>{
                 .order("date",{ascending:false})
                 .limit(20);
 
-            let msg="📜 履歴（最新20件）\n\n";
-
+            let msg="📜 履歴\n\n";
             data.forEach(r=>{
                 msg += `${r.date} ${r.subject}：${r.name}\n`;
             });
