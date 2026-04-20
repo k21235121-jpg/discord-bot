@@ -5,24 +5,33 @@ const CLIENT_ID = "1493204958571532399";
 const GUILD_ID = "1386584494529708133";
 
 const commands = [
-    { name: "today", description: "今日の担当" },
-    { name: "point", description: "自分のポイント" },
+    {
+        name: "today",
+        description: "今日の担当を表示"
+    },
+    {
+        name: "point",
+        description: "自分のポイント確認"
+    },
     {
         name: "admin",
-        description: "管理者用",
+        description: "管理者コマンド",
         options: [
-            { name: "view", type: 1, description: "全員ポイント" },
-            { name: "reset", type: 1, description: "リセット" },
             {
-                name: "set",
-                type: 1,
-                description: "ポイント変更",
-                options: [
-                    { name: "name", type: 3, required: true, description: "名前" },
-                    { name: "point", type: 4, required: true, description: "ポイント" }
-                ]
+                name: "view",
+                description: "ポイント一覧",
+                type: 1
             },
-            { name: "history", type: 1, description: "履歴表示" }
+            {
+                name: "history",
+                description: "履歴表示",
+                type: 1
+            },
+            {
+                name: "reset",
+                description: "ポイントリセット",
+                type: 1
+            }
         ]
     }
 ];

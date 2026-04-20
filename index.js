@@ -55,11 +55,11 @@ const memberNames = Object.keys(members).filter(n => n !== "そうすけ");
 const cannotImage = ["りつき","せいちー","ゆうや"];
 
 const heavySubjects = ["確率統計","応用物理","ディジタル信号処理"];
-const normalSubjects = ["画像情報処理","電子回路","制御工学","ソフトウェア工学"];
+const normalSubjects = ["画像情報処理","電子回路","制御工学","ソフトウェア工学","英語購読"];
 
 // ===== 時間割 =====
 const timetable = {
-    1: ["確率統計"],
+    1: ["英語購読","確率統計"],
     2: ["情報通信","ディジタル信号処理","画像情報処理"],
     3: ["応用物理","ソフトウェア工学"],
     4: ["電子回路"],
@@ -109,17 +109,13 @@ async function saveHistory(date, result){
     await supabase.from("history").insert(rows);
 }
 
-// ===== 履歴から復元 =====
-function buildResultFromHistory(historyData){
+// ===== 履歴復元 =====
+function buildResultFromHistory(data){
     const result = {};
-
-    historyData.forEach(r=>{
-        if(!result[r.subject]){
-            result[r.subject] = [];
-        }
+    data.forEach(r=>{
+        if(!result[r.subject]) result[r.subject]=[];
         result[r.subject].push(r.name);
     });
-
     return result;
 }
 
@@ -139,34 +135,26 @@ async function assignToday(){
     const used = [];
     const result = {};
 
-    // 重い教科
     for(let sub of heavySubjects){
         let c = sortMembers(points).filter(n=>!used.includes(n));
         let p1=c[0], p2=c[1];
-
         result[sub]=[p1,p2];
         points[p1]+=2;
         points[p2]+=2;
-
         used.push(p1,p2);
     }
 
-    // 軽い教科
     for(let sub of normalSubjects){
         let c = sortMembers(points).filter(n=>!used.includes(n));
-
         if(sub==="画像情報処理"){
             c = c.filter(n=>!cannotImage.includes(n));
         }
-
         let p=c[0];
         result[sub]=p;
         points[p]+=1;
-
         used.push(p);
     }
 
-    // 情報通信（固定）
     if(getTodaySubjects().includes("情報通信")){
         result["情報通信"]=["そうすけ"];
     }
@@ -174,21 +162,19 @@ async function assignToday(){
     return {result,points};
 }
 
-// ===== 1日1回処理 =====
+// ===== 1日1回 =====
 async function confirmTodayOnce(){
     const today = getTodayStr();
 
-    // すでに存在するか確認
     const { data } = await supabase
         .from("history")
         .select("*")
         .eq("date", today);
 
-    if(data && data.length > 0){
+    if(data && data.length>0){
         return buildResultFromHistory(data);
     }
 
-    // 初回のみ計算
     const {result,points} = await assignToday();
 
     await savePoints(points);
@@ -204,50 +190,39 @@ client.once("clientReady",()=>console.log("Bot起動！"));
 client.on("interactionCreate",async interaction=>{
     if(!interaction.isChatInputCommand()) return;
 
-    // ===== today =====
+    // today
     if(interaction.commandName==="today"){
         const subjects = getTodaySubjects();
-
         if(subjects.length===0){
             return interaction.reply("今日は授業なし！");
         }
 
         await interaction.deferReply();
-
         const data = await confirmTodayOnce();
 
         let msg="📚 今日の担当\n\n";
-
         for(let sub of subjects){
             if(!data[sub]) continue;
-
             const names = Array.isArray(data[sub]) ? data[sub] : [data[sub]];
-
             msg += `${sub}：${names.map(n=>`<@${members[n]}>`).join("・")}\n`;
         }
 
         interaction.editReply(msg);
     }
 
-    // ===== point =====
+    // point
     if(interaction.commandName==="point"){
         await interaction.deferReply({ephemeral:true});
-
         const points = await getPoints();
-        const id = interaction.user.id;
 
-        const name = Object.keys(members).find(n=>members[n]===id);
-
+        const name = Object.keys(members).find(n=>members[n]===interaction.user.id);
         if(!name) return interaction.editReply("未登録");
-
-        if(name==="そうすけ"){
-            return interaction.editReply("ポイント対象外");
-        }
+        if(name==="そうすけ") return interaction.editReply("対象外");
 
         interaction.editReply(`あなたのポイント：${points[name]}pt`);
     }
 
-    // ===== admin =====
+    // admin
     if(interaction.commandName==="admin"){
         if(interaction.user.id!==ADMIN_ID){
             return interaction.reply({content:"管理者のみ",ephemeral:true});
@@ -261,7 +236,6 @@ client.on("interactionCreate",async interaction=>{
             const points = await getPoints();
 
             let msg="📊 ポイント一覧\n\n";
-
             Object.entries(points)
                 .sort((a,b)=>a[1]-b[1])
                 .forEach(([n,p])=>{
@@ -274,7 +248,6 @@ client.on("interactionCreate",async interaction=>{
         // history
         if(sub==="history"){
             await interaction.deferReply({ephemeral:true});
-
             const { data } = await supabase
                 .from("history")
                 .select("*")
@@ -287,6 +260,20 @@ client.on("interactionCreate",async interaction=>{
             });
 
             interaction.editReply(msg);
+        }
+
+        // reset（追加）
+        if(sub==="reset"){
+            const reset = memberNames.map(n=>({name:n,point:0}));
+
+            await supabase
+                .from("points")
+                .upsert(reset,{onConflict:"name"});
+
+            interaction.reply({
+                content:"全員のポイントをリセットしました",
+                ephemeral:true
+            });
         }
     }
 });
