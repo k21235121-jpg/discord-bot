@@ -95,21 +95,18 @@ async function savePoints(points){
     await supabase.from("points").upsert(updates,{onConflict:"name"});
 }
 
-// ===== 履歴保存 =====
+// ===== 履歴 =====
 async function saveHistory(date, result){
     const rows = [];
-
     for(let sub in result){
         const people = Array.isArray(result[sub]) ? result[sub] : [result[sub]];
         people.forEach(p=>{
             rows.push({date, subject: sub, name: p});
         });
     }
-
     await supabase.from("history").insert(rows);
 }
 
-// ===== 履歴復元 =====
 function buildResultFromHistory(data){
     const result = {};
     data.forEach(r=>{
@@ -129,37 +126,49 @@ function sortMembers(points){
         .map(e=>e[0]);
 }
 
-// ===== 担当決定 =====
+// ===== 修正版：今日だけ処理 =====
 async function assignToday(){
     const points = await getPoints();
     const used = [];
     const result = {};
 
-    for(let sub of heavySubjects){
-        let c = sortMembers(points).filter(n=>!used.includes(n));
-        let p1=c[0], p2=c[1];
-        result[sub]=[p1,p2];
-        points[p1]+=2;
-        points[p2]+=2;
-        used.push(p1,p2);
-    }
+    const todaySubjects = getTodaySubjects();
 
-    for(let sub of normalSubjects){
-        let c = sortMembers(points).filter(n=>!used.includes(n));
-        if(sub==="画像情報処理"){
-            c = c.filter(n=>!cannotImage.includes(n));
+    for(let sub of todaySubjects){
+
+        // 情報通信固定
+        if(sub === "情報通信"){
+            result[sub] = ["そうすけ"];
+            continue;
         }
-        let p=c[0];
-        result[sub]=p;
-        points[p]+=1;
-        used.push(p);
+
+        let candidates = sortMembers(points).filter(n => !used.includes(n));
+
+        if(heavySubjects.includes(sub)){
+            let p1 = candidates[0];
+            let p2 = candidates[1];
+
+            result[sub] = [p1, p2];
+            points[p1] += 2;
+            points[p2] += 2;
+
+            used.push(p1, p2);
+
+        } else {
+            if(sub === "画像情報処理"){
+                candidates = candidates.filter(n => !cannotImage.includes(n));
+            }
+
+            let p = candidates[0];
+
+            result[sub] = p;
+            points[p] += 1;
+
+            used.push(p);
+        }
     }
 
-    if(getTodaySubjects().includes("情報通信")){
-        result["情報通信"]=["そうすけ"];
-    }
-
-    return {result,points};
+    return { result, points };
 }
 
 // ===== 1日1回 =====
@@ -193,17 +202,22 @@ client.on("interactionCreate",async interaction=>{
     // today
     if(interaction.commandName==="today"){
         const subjects = getTodaySubjects();
+
         if(subjects.length===0){
             return interaction.reply("今日は授業なし！");
         }
 
         await interaction.deferReply();
+
         const data = await confirmTodayOnce();
 
         let msg="📚 今日の担当\n\n";
+
         for(let sub of subjects){
             if(!data[sub]) continue;
+
             const names = Array.isArray(data[sub]) ? data[sub] : [data[sub]];
+
             msg += `${sub}：${names.map(n=>`<@${members[n]}>`).join("・")}\n`;
         }
 
@@ -213,9 +227,11 @@ client.on("interactionCreate",async interaction=>{
     // point
     if(interaction.commandName==="point"){
         await interaction.deferReply({ephemeral:true});
+
         const points = await getPoints();
 
         const name = Object.keys(members).find(n=>members[n]===interaction.user.id);
+
         if(!name) return interaction.editReply("未登録");
         if(name==="そうすけ") return interaction.editReply("対象外");
 
@@ -230,7 +246,6 @@ client.on("interactionCreate",async interaction=>{
 
         const sub = interaction.options.getSubcommand();
 
-        // view
         if(sub==="view"){
             await interaction.deferReply({ephemeral:true});
             const points = await getPoints();
@@ -245,7 +260,6 @@ client.on("interactionCreate",async interaction=>{
             interaction.editReply(msg);
         }
 
-        // history
         if(sub==="history"){
             await interaction.deferReply({ephemeral:true});
             const { data } = await supabase
@@ -262,7 +276,6 @@ client.on("interactionCreate",async interaction=>{
             interaction.editReply(msg);
         }
 
-        // reset（追加）
         if(sub==="reset"){
             const reset = memberNames.map(n=>({name:n,point:0}));
 
