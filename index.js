@@ -54,8 +54,8 @@ const memberNames = Object.keys(members).filter(n => n !== "そうすけ");
 // ===== 制約 =====
 const cannotImage = ["りつき","せいちー","ゆうや"];
 
-const heavySubjects = ["確率統計","応用物理","ディジタル信号処理"];
-const normalSubjects = ["画像情報処理","電子回路","制御工学","ソフトウェア工学","英語購読"];
+const heavySubjects = ["確率統計","応用物理","ディジタル信号処理","電子回路"];
+const normalSubjects = ["画像情報処理","制御工学","ソフトウェア工学","英語購読"];
 
 // ===== 時間割 =====
 const timetable = {
