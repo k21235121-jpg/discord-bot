@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.103.2",
     "discord.js": "^14.26.2",
     "express": "^5.2.1",
+    "node-cron": "^4.6.0",
     "pm2": "^6.0.14"
   }
 }
