@@ -427,6 +427,20 @@ function getTomorrowSubjects() {
 
 }
 
+async function createTodayMessage() {
+    const subjects = getTodaySubjects();
+    const data = await confirmTodayOnce();
+
+    return buildMessage(subjects, data, "📚 今日のノート担当");
+}
+
+async function createTomorrowMessage() {
+    const subjects = getTomorrowSubjects();
+    const data = await getTomorrowAssignment();
+
+    return buildMessage(subjects, data, "🌙 明日のノート担当");
+}
+
 // =====================
 // 自動送信
 // =====================
@@ -445,7 +459,7 @@ async function sendAssignment(title, subjects, data) {
 }
 // ===== 起動 =====
 // ===== Discord起動 =====
-client.once("clientReady", async () => {
+client.once("ready", async () => {
     console.log("Bot起動！");
 
     // ===== 毎日22:00 明日の担当 =====
@@ -619,4 +633,11 @@ client.on("interactionCreate", async interaction => {
 });
 
 // ===== ログイン =====
-client.login(TOKEN);
+if (require.main === module) {
+    client.login(TOKEN);
+}
+
+module.exports = {
+    createTodayMessage,
+    createTomorrowMessage
+};
