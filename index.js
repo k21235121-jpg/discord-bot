@@ -462,28 +462,8 @@ async function sendAssignment(title, subjects, data) {
 client.once("ready", async () => {
     console.log("Bot起動！");
 
-    // ===== 毎日22:00 明日の担当 =====
-    cron.schedule("0 22 * * *", async () => {
-        try {
-            const channel = await client.channels.fetch(CHANNEL_ID);
-            if (!channel) return;
-
-            const msg = await createTomorrowMessage();
-
-            await channel.send({
-                content: "🌙 明日のノート担当です！\n\n" + msg
-            });
-
-            console.log("22:00送信完了");
-        } catch (err) {
-            console.error("22:00送信失敗", err);
-        }
-    }, {
-        timezone: "Asia/Tokyo"
-    });
-
-    // ===== 毎日8:30 今日の担当 =====
-    cron.schedule("30 8 * * *", async () => {
+    // ===== 平日8:30 今日の担当 =====
+    cron.schedule("30 8 * * 1-5", async () => {
         try {
             const channel = await client.channels.fetch(CHANNEL_ID);
             if (!channel) return;
