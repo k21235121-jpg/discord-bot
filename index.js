@@ -23,6 +23,9 @@ const TOKEN = process.env.TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
+// 長期休暇中は授業がないため8:30自動送信を一時停止
+const AUTO_SEND_ENABLED = false;
+
 // 自動送信先チャンネル
 const CHANNEL_ID = "1493407188058767360";
 
@@ -462,6 +465,11 @@ async function sendAssignment(title, subjects, data) {
 client.once("ready", async () => {
     console.log("Bot起動！");
 
+    if (!AUTO_SEND_ENABLED) {
+        console.log("長期休暇のため8:30自動送信を一時停止中");
+        return;
+    }
+
     // ===== 平日8:30 今日の担当 =====
     cron.schedule("30 8 * * 1-5", async () => {
         try {
@@ -618,6 +626,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+    AUTO_SEND_ENABLED,
     createTodayMessage,
     createTomorrowMessage
 };

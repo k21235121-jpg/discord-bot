@@ -11,3 +11,8 @@ test('assignment message helpers are exported', () => {
     assert.equal(typeof createTodayMessage, 'function');
     assert.equal(typeof createTomorrowMessage, 'function');
 });
+
+test('daily 8:30 auto-send is temporarily disabled', () => {
+    const { AUTO_SEND_ENABLED } = require('../index.js');
+    assert.equal(AUTO_SEND_ENABLED, false);
+});
