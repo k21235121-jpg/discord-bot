@@ -23,8 +23,8 @@ const TOKEN = process.env.TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-// 長期休暇中は授業がないため8:30自動送信を一時停止
-const AUTO_SEND_ENABLED = false;
+// 授業期間中は8:30の自動送信を有効化
+const AUTO_SEND_ENABLED = true;
 
 // 自動送信先チャンネル
 const CHANNEL_ID = "1493407188058767360";
@@ -103,6 +103,7 @@ const heavySubjects = [
 
 // 1人担当
 const normalSubjects = [
+    "VLSI工学",
     "画像情報処理",
     "ソフトウェア工学"
 ];
@@ -111,24 +112,18 @@ const normalSubjects = [
 // 時間割
 // =====================
 const timetable = {
-    1: [
-        "確率統計"
-    ],
+    1: [],
     2: [
-        "情報通信",
-        "ディジタル信号処理",
-        "画像情報処理"
+        "VLSI工学"
     ],
     3: [
-        "応用物理",
-        "ソフトウェア工学"
+        "ソフトウェア工学",
+        "制御工学"
     ],
     4: [
-        "電子回路"
+        "ディジタル信号処理"
     ],
-    5: [
-        "制御工学"
-    ]
+    5: []
 };
 
 // =====================
@@ -432,6 +427,11 @@ function getTomorrowSubjects() {
 
 async function createTodayMessage() {
     const subjects = getTodaySubjects();
+
+    if (subjects.length === 0) {
+        return "今日は授業がありません。";
+    }
+
     const data = await confirmTodayOnce();
 
     return buildMessage(subjects, data, "📚 今日のノート担当");
@@ -439,6 +439,11 @@ async function createTodayMessage() {
 
 async function createTomorrowMessage() {
     const subjects = getTomorrowSubjects();
+
+    if (subjects.length === 0) {
+        return "明日は授業がありません。";
+    }
+
     const data = await getTomorrowAssignment();
 
     return buildMessage(subjects, data, "🌙 明日のノート担当");
@@ -473,6 +478,13 @@ client.once("ready", async () => {
     // ===== 平日8:30 今日の担当 =====
     cron.schedule("30 8 * * 1-5", async () => {
         try {
+            const subjects = getTodaySubjects();
+
+            if (subjects.length === 0) {
+                console.log("本日は授業がないため送信しません");
+                return;
+            }
+
             const channel = await client.channels.fetch(CHANNEL_ID);
             if (!channel) return;
 
@@ -627,6 +639,7 @@ if (require.main === module) {
 
 module.exports = {
     AUTO_SEND_ENABLED,
+    getSubjects,
     createTodayMessage,
     createTomorrowMessage
 };

@@ -5,14 +5,28 @@ process.env.TOKEN = 'dummy-token';
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_KEY = 'dummy-key';
 
-const { createTodayMessage, createTomorrowMessage } = require('../index.js');
+const {
+    AUTO_SEND_ENABLED,
+    getSubjects,
+    createTodayMessage,
+    createTomorrowMessage
+} = require('../index.js');
 
 test('assignment message helpers are exported', () => {
     assert.equal(typeof createTodayMessage, 'function');
     assert.equal(typeof createTomorrowMessage, 'function');
 });
 
-test('daily 8:30 auto-send is temporarily disabled', () => {
-    const { AUTO_SEND_ENABLED } = require('../index.js');
-    assert.equal(AUTO_SEND_ENABLED, false);
+test('daily 8:30 auto-send is enabled', () => {
+    assert.equal(AUTO_SEND_ENABLED, true);
+});
+
+test('new weekly timetable is configured', () => {
+    assert.deepEqual(getSubjects(1), []);
+    assert.deepEqual(getSubjects(2), ['VLSI工学']);
+    assert.deepEqual(getSubjects(3), ['ソフトウェア工学', '制御工学']);
+    assert.deepEqual(getSubjects(4), ['ディジタル信号処理']);
+    assert.deepEqual(getSubjects(5), []);
+    assert.deepEqual(getSubjects(0), []);
+    assert.deepEqual(getSubjects(6), []);
 });
