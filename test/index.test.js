@@ -11,6 +11,7 @@ const {
     POINTS_PER_ASSIGNMENT,
     getSubjects,
     getSubjectsForDate,
+    getExcludedMembersForDate,
     createTodayMessage,
     createTomorrowMessage
 } = require('../index.js');
@@ -52,4 +53,19 @@ test('the temporary exception does not affect the following Wednesday', () => {
         getSubjectsForDate(date),
         ['ソフトウェア工学', '制御工学']
     );
+});
+
+test('the previous assignees are excluded from the 2026-10-07 reroll', () => {
+    const date = new Date('2026-10-07T12:00:00+09:00');
+
+    assert.deepEqual(
+        getExcludedMembersForDate(date),
+        ['じん', 'しゅうや']
+    );
+});
+
+test('reroll exclusions do not affect later dates', () => {
+    const date = new Date('2026-10-14T12:00:00+09:00');
+
+    assert.deepEqual(getExcludedMembersForDate(date), []);
 });

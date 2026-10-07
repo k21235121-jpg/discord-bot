@@ -113,6 +113,11 @@ const completedSubjectsByDate = {
     "2026-10-07": ["ソフトウェア工学"]
 };
 
+// 再抽選時に、同じ日の候補から外すメンバー
+const excludedMembersByDate = {
+    "2026-10-07": ["じん", "しゅうや"]
+};
+
 // =====================
 // 日付
 // =====================
@@ -150,6 +155,12 @@ function getSubjectsForDate(date) {
     return getSubjects(day).filter(
         subject => !completed.includes(subject)
     );
+}
+
+function getExcludedMembersForDate(date) {
+    const dateStr = date.toISOString().slice(0, 10);
+
+    return excludedMembersByDate[dateStr] || [];
 }
 
 function getTodaySubjects() {
@@ -281,10 +292,14 @@ async function assignToday(dayOffset = 0) {
     date.setDate(date.getDate() + dayOffset);
 
     const subjects = getSubjectsForDate(date);
+    const excludedMembers = getExcludedMembersForDate(date);
 
     for (const subject of subjects) {
         const candidates = sortMembers(points)
-            .filter(name => !used.includes(name));
+            .filter(name => (
+                !used.includes(name) &&
+                !excludedMembers.includes(name)
+            ));
 
         const assignees = candidates.slice(0, ASSIGNEES_PER_SUBJECT);
 
@@ -604,6 +619,7 @@ module.exports = {
     POINTS_PER_ASSIGNMENT,
     getSubjects,
     getSubjectsForDate,
+    getExcludedMembersForDate,
     createTodayMessage,
     createTomorrowMessage
 };
