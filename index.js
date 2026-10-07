@@ -85,28 +85,10 @@ const memberNames = Object.keys(members).filter(
 );
 
 // =====================
-// 制約
+// 担当ルール
 // =====================
-const cannotImage = [
-    "せいちー",
-    "ゆうや"
-];
-
-// 2人担当
-const heavySubjects = [
-    "確率統計",
-    "応用物理",
-    "ディジタル信号処理",
-    "電子回路",
-    "制御工学"
-];
-
-// 1人担当
-const normalSubjects = [
-    "VLSI工学",
-    "画像情報処理",
-    "ソフトウェア工学"
-];
+const ASSIGNEES_PER_SUBJECT = 2;
+const POINTS_PER_ASSIGNMENT = 1;
 
 // =====================
 // 時間割
@@ -124,6 +106,11 @@ const timetable = {
         "ディジタル信号処理"
     ],
     5: []
+};
+
+// 当日すでに終了した授業など、一時的に抽選対象から外す教科
+const completedSubjectsByDate = {
+    "2026-10-07": ["ソフトウェア工学"]
 };
 
 // =====================
@@ -150,14 +137,23 @@ function getSubjects(day) {
     return timetable[day] || [];
 }
 
-function getTodaySubjects() {
-    const day = getJSTDate().getDay();
+function getSubjectsForDate(date) {
+    const day = date.getDay();
 
     if (day === 0 || day === 6) {
         return [];
     }
 
-    return getSubjects(day);
+    const dateStr = date.toISOString().slice(0, 10);
+    const completed = completedSubjectsByDate[dateStr] || [];
+
+    return getSubjects(day).filter(
+        subject => !completed.includes(subject)
+    );
+}
+
+function getTodaySubjects() {
+    return getSubjectsForDate(getJSTDate());
 }
 // =====================
 // DB
@@ -284,56 +280,21 @@ async function assignToday(dayOffset = 0) {
 
     date.setDate(date.getDate() + dayOffset);
 
-    const week = date.getDay();
-
-    if (week === 0 || week === 6) {
-        return {
-            result: {},
-            points
-        };
-    }
-
-    const subjects = getSubjects(week);
+    const subjects = getSubjectsForDate(date);
 
     for (const subject of subjects) {
-
-        if (subject === "情報通信") {
-            result[subject] = ["そうすけ"];
-            continue;
-        }
-
-        let candidates = sortMembers(points)
+        const candidates = sortMembers(points)
             .filter(name => !used.includes(name));
 
-        if (subject === "画像情報処理") {
-            candidates = candidates.filter(
-                name => !cannotImage.includes(name)
-            );
-        }
+        const assignees = candidates.slice(0, ASSIGNEES_PER_SUBJECT);
 
-        if (heavySubjects.includes(subject)) {
+        result[subject] = assignees;
 
-            const p1 = candidates[0];
-            const p2 = candidates[1];
+        assignees.forEach(name => {
+            points[name] += POINTS_PER_ASSIGNMENT;
+        });
 
-            result[subject] = [p1, p2];
-
-            points[p1] += 2;
-            points[p2] += 2;
-
-            used.push(p1, p2);
-
-        } else {
-
-            const p = candidates[0];
-
-            result[subject] = p;
-
-            points[p] += 1;
-
-            used.push(p);
-
-        }
+        used.push(...assignees);
 
     }
 
@@ -639,7 +600,10 @@ if (require.main === module) {
 
 module.exports = {
     AUTO_SEND_ENABLED,
+    ASSIGNEES_PER_SUBJECT,
+    POINTS_PER_ASSIGNMENT,
     getSubjects,
+    getSubjectsForDate,
     createTodayMessage,
     createTomorrowMessage
 };
